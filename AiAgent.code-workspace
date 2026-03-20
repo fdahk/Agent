@@ -1,0 +1,13 @@
+{
+	"folders": [
+		{
+			"name": "AiAgent",
+			"path": "."
+		},
+		{
+			"name": "agent-server",
+			"path": "../agent-server"
+		}
+	],
+	"settings": {}
+}
