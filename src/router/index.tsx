@@ -3,6 +3,8 @@ import Layout from '@/pages/layout';
 import ChatBotPage from '@/pages/chat-bot';
 import ExpandPage from '@/pages/expand';
 import WorkspacePage from '@/pages/workspace';
+import ResourceOrganizerPage from '@/pages/workspace/resource-organizer-agent';
+import AgentStudyPage from '@/pages/workspace/agent-study';
 import { CozeAgent } from '@/pages/coze-agent';
 export const router = createBrowserRouter([
   {
@@ -24,6 +26,14 @@ export const router = createBrowserRouter([
       {
         path: '/workspace',
         element: <WorkspacePage />,
+      },
+      {
+        path: '/workspace/resource-organizer',
+        element: <ResourceOrganizerPage />,
+      },
+      {
+        path: '/workspace/agent-study',
+        element: <AgentStudyPage />,
       },
     ],
   },

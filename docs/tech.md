@@ -28,6 +28,270 @@
 
 ---
 
+## CSS `color-mix()` `background: color-mix(in srgb, var(--bg-surface-color) 92%, transparent);`
+
+### 1. 必要概念 / 名词解释 / 背景知识
+
+- **CSS 颜色与「算出来的颜色」**  
+  传统写法多是直接写死 `#rrggbb`、`rgb()`、`rgba()`。当需要根据主题变量（如 `--bg-surface-color`）做「稍微淡一点 / 半透明一点」时，若手写 `rgba(...)` 还要把十六进制拆开换算，维护成本高。**`color-mix()`**（[CSS Color Module Level 5](https://www.w3.org/TR/css-color-5/#color-mix)）允许在样式里用声明式语法**按比例混合两种颜色**，得到一个新颜色，而无需在预处理或 JS 里手动算通道值。
+
+- **`color-mix()` 是什么**  
+  它是一个 CSS 函数，语法核心为：  
+  `color-mix(in <颜色空间>, <颜色A> <可选百分比>, <颜色B> <可选百分比>)`  
+  表示在指定**颜色空间**里，按给定**权重**对两种颜色做**插值**（混合），输出**一个**新的 `<color>` 值。
+
+- **`in srgb`（在 sRGB 空间里混合）**  
+  **sRGB** 是 Web 与绝大多数显示器默认使用的标准 RGB 色域。`in srgb` 表示：把两种颜色先转换/映射到 sRGB 下进行分量插值（R、G、B 以及 alpha 等按规范参与计算）。同一组颜色在不同空间混合，结果可能不同；选 `srgb` 意味着「按经典屏幕 RGB 规则线性插值」，行为直观、与大量设计工具里的 RGB 滑块相近。
+
+- **`var(--bg-surface-color)`**  
+  自定义属性（CSS 变量），运行时由主题或上层容器解析为具体颜色（如某个浅灰表面色）。`color-mix` 接受任何可解析为 `<color>` 的值，包括 `var()`。
+
+- **`transparent`**  
+  在 CSS 中，`transparent` 等价于**全透明的黑色**（历史上常对应 `rgba(0, 0, 0, 0)`）。把它作为混合的一方，相当于在混合结果里引入「透明那一侧」的 RGBA 分量，从而 often 得到**带一定透明度**或**更贴近「冲淡到背景」**的效果（具体数值依赖另一方颜色与混合空间）。
+
+- **只写一个百分比时的规则**  
+  形如 `color-mix(in srgb, A 92%, B)`：只给 **A** 写了 `92%`，则 **B 自动占剩余的 8%**（两者权重和为 100%）。因此本行等价于「约 92% 的表面色 + 约 8% 的 transparent」。
+
+### 2. 本质是在做什么
+
+**一句话**：在 sRGB 颜色空间里，把主题表面色 `--bg-surface-color` 与 `transparent` 按约 **92% : 8%** 做颜色混合，生成一个新的背景色——通常用于卡片/区块背景在**不单独写 `opacity`** 的前提下，得到**略偏透明、更柔和、能透出底下渐变或底色的视觉效果**（具体观感仍取决于 `--bg-surface-color` 本身与下层背景）。
+
+### 3. 发挥作用的原理（使用者视角）
+
+1. 浏览器解析到 `background: color-mix(...)` 时，先求出 `--bg-surface-color` 的具体颜色值。  
+2. 在 **sRGB** 混合路径下，按规范对两种颜色的分量（含 alpha）做加权插值。  
+3. 得到的单一颜色作为 `.heroCard` / `.sectionCard` 的**背景填充色**。  
+4. 因为卡片背后还有 `.workspaceContainer` 上的径向渐变与 `--bg-primary-color`（见同文件 `.workspaceContainer`），半透明或偏淡的表面色会让**底层渐变微微透上来**，视觉更「分层」、不那么死实心。
+
+与「给整个卡片设 `opacity: 0.92`」不同：`color-mix` 只改变**背景这一项**用到的颜色；**子元素文字不会因此被整体变淡**（除非子元素也用了继承或滤镜等）。这是 UI 上常用此写法的原因之一。
+
+### 4. 作用过程的底层原理（更接近实现/标准在说什么）
+
+- **发生在哪个阶段**  
+  这是**浏览器样式计算**阶段的能力：属于 CSS Values 与 Colors 标准的一部分，**不依赖 Sass 在编译期算出最终十六进制**（Sass 把该行原样输出到 CSS 即可）。最终求值由用户代理（浏览器）在应用样式时完成。
+
+- **「混合」在数学上是什么**  
+  在选定颜色空间内，把两个颜色表示为若干通道（如 R、G、B、alpha），对每个通道做**线性加权平均**（权重即百分比对应的比例）。不同颜色空间下，通道含义不同（例如其它空间可能在「感知均匀」的维度上插值），所以**同一对颜色**在 `srgb` 与 `oklch` 等空间混合，**数值结果可能明显不同**。
+
+- **与 alpha / 预乘**  
+  当参与混合的颜色带透明度时，规范会按定义处理 alpha 与**预乘（premultiplied）**相关细节，以保证混合结果与「在画布上如何叠色」的模型一致。把 `transparent`（0,0,0,0）与不透明白/灰混合，会得到**半透明色**，其 RGB 与 alpha 都是混合后的结果；这不是简单的「给纯色乘 0.92 不透明度」在一切情况下都数值相等，但**意图相近**：控制背景的通透程度。
+
+- **变量未定义或无效时**  
+  若 `--bg-surface-color` 未定义或整条 `color-mix` 无效，该声明可能被忽略，背景可能回退到继承或更上层规则，需在实际主题里保证变量有效。
+
+### 5. 扩展知识与注意点
+
+- **浏览器兼容性**  
+  `color-mix()` 在较新的 Chromium、Firefox、Safari 中已可用；若需覆盖很老的浏览器，需 **fallback**（例如先写一条 `background: rgba(...)` 或纯色，再写 `color-mix` 覆盖），或通过 `@supports (background: color-mix(in srgb, red, blue))` 分支处理。
+
+- **为何写 `in srgb` 而不是别的空间**  
+  项目里显式写 `srgb` 可以**固定混合语义**，避免未来默认值或实现细节变化带来的细微差异；若追求**人眼感知上更均匀**的明暗变化，可研究 `in oklch`、`in hsl` 等，但色相/饱和度行为会不同，需设计侧配合。
+
+- **与 `opacity` / `rgba(…, 0.92)` 的对比**  
+  - `opacity`：作用于元素（及在合成上的行为），常影响整棵子树视觉。  
+  - `background-color: rgba(...)`：只影响背景，但需手动从主题色换算 alpha。  
+  - `color-mix(..., 92%, transparent)`：**声明式**从主题色推到「略透明」的背景色，主题换色时仍按比例混合，维护成本通常更低。
+
+- **Sass 与原生 CSS**  
+  若构建链中的 Sass 较旧，可能对未知函数报错；现代 **Dart Sass** 通常会把无法识别的函数**透传**到 CSS。若遇编译错误，需升级 Sass 或使用 `unquote` 等兼容手段（以项目实际版本为准）。
+
+- **设计注意**  
+  混合比例（如 92%）与底层背景对比度会影响**可读性**与**无障碍对比度**；若文字对比不足，应调整比例、描边或底色，而不是仅依赖「好看」的通透感。
+
+---
+
+## React：`useMemo` 规范化目录与 `setState` 函数式更新（`resource-organizer/index.tsx`）
+
+**代码出处**：
+
+```ts
+const normalizedDirectories = useMemo(
+  () => directories.map((item) => item.trim()).filter(Boolean),
+  [directories],
+);
+
+const appendEvent = (event: AgentRunEvent) => {
+  // 用函数式更新状态，避免直接修改state，导致组件重新渲染
+  setEvents((previous) => [event, ...previous].slice(0, 80));
+};
+```
+
+以下分两块说明：**`useMemo` 规范化 `directories`**、**`setEvents` 函数式更新**。
+
+### A. `normalizedDirectories` 与 `useMemo`
+
+#### 1. 必要概念 / 名词解释 / 背景知识
+
+- **`useMemo`**：React Hook，签名大致为 `useMemo(factory, deps)`。在**渲染过程**中调用：根据依赖数组 `deps` 判断本次渲染是否与上次**依赖相等**；若相等则**复用上次缓存的返回值**，否则重新执行 `factory` 并得到新缓存值。  
+- **派生数据（derived state）**：`normalizedDirectories` 不是用户直接编辑的「源数据」，而是由 `directories` **计算出来**的字符串列表（去掉首尾空白、去掉空项）。  
+- **`Array.prototype.map` / `trim` / `filter(Boolean)`**  
+  - `map((item) => item.trim())`：对每个输入字符串去掉首尾空白（不改动原 state 数组里的字符串对象引用关系——这里生成的是**新字符串**）。  
+  - `filter(Boolean)`：`Boolean` 作为回调时等价于去掉所有 **falsy** 值（`''`、`0`、`false`、`null`、`undefined`、`NaN`）。此处 `trim` 之后主要用来去掉**空字符串**，使后续提交/校验只面对「有意义的目录路径」。  
+- **为何会想到用 `useMemo`**：`map` + `filter` 每次执行都会**新分配数组**；若不用 `useMemo`，则**每次父组件重渲染**都会重新计算，可能让**子组件或依赖该值的 `useEffect`** 误以为引用变了（若把它们放进依赖数组）。`useMemo` 在 `directories` 不变时**保持同一数组引用**，有利于稳定下游依赖。
+
+#### 2. 本质是在做什么
+
+在 **`directories` 未变**的前提下，**缓存**「去空白 + 去空串」后的列表；一旦 **`directories` 引用或内容对应的依赖更新**（此处依赖是 `[directories]`，即 state 更新导致新数组引用），再重新计算。
+
+#### 3. 发挥作用的原理（使用者视角）
+
+1. 用户修改目录输入 → `setDirectories` 更新 state → `directories` 变为新数组引用。  
+2. 下一次渲染中 `useMemo` 发现 `directories` 与上次不同 → 执行工厂函数 → 得到新的 `normalizedDirectories`。  
+3. 若本次渲染中其它 state 变化但 **`directories` 仍是同一引用**（实际中较少见，因为通常改目录会 `setDirectories`），则 `useMemo` **跳过计算**，返回旧缓存。  
+4. 页面其它逻辑（如提交前校验、展示）应优先读 `normalizedDirectories`，避免重复写一遍 `map`/`filter`。
+
+#### 4. 作用过程的底层原理
+
+- **调用时机**：`useMemo` 在函数组件函数体执行时同步运行；依赖比较使用 **`Object.is`** 语义（与 `useEffect` 依赖比较一致）。  
+- **缓存存哪**：React 在 Fiber 上为每个 Hook 顺序槽位保存「上次 deps + 上次计算结果」；**不是**全局持久化，**不是**磁盘缓存。  
+- **`[directories]` 的含义**：只有 `directories` 这个 state 的引用变化才会重算。若有人**原地修改** `directories` 数组（不推荐）而不换引用，`useMemo` **不会**重算——这也是 React 一贯要求 **immutable 更新 state** 的原因之一。
+
+#### 5. 扩展知识与注意点
+
+- **是否必须 `useMemo`**：若下游没有 `memo`/`useEffect` 依赖该数组引用，仅「少算几次 map/filter」在数据量很小时收益有限；此处更常见的动机是**稳定引用**或**与 eslint exhaustive-deps 配合清晰表达「仅随 directories 变」**。  
+- **与 `useCallback` 区分**：`useMemo` 缓存**任意计算结果**（这里是数组）；`useCallback` 专门缓存**函数引用**（内部往往也是 `useMemo` 的语法糖）。  
+- **`filter(Boolean)` 的类型**：在 TypeScript 中有时需配合类型谓词才能得到 `(string)[]`，否则可能仍推断为 `string[]` 含宽泛类型；以项目 `tsconfig` 与版本为准。  
+- **同类模式**：同文件中 `normalizedUrls` 与 `normalizedDirectories` 对称，语义一致。
+
+---
+
+### B. 函数式更新
+
+#### 1. 必要概念 / 名词解释 / 背景知识
+
+- **`useState` 的 setter**：`setEvents` 既可传入**新值**，也可传入**更新函数** `(previous) => next`。后者称为**函数式更新（functional update）**。  
+- **不可变更新（immutability）**：React state 应按**替换引用**的方式更新，而不是 `previous.push(event)` **原地改数组**。新代码用展开运算构造 `[event, ...previous]`，是典型不可变模式。  
+- **关于文件内注释的精确表述**：注释写「避免直接修改 state」——**正确方向**是：**不要 mutate 原数组**。函数式更新带来的**额外好处**是：在异步、闭包、或短时间内多次 `appendEvent` 时，`previous` 由 React 保证为**当前排队更新完成后的最新 state**，而不是事件创建当下闭包里的旧 `events`。若写 `setEvents([event, ...events].slice(0, 80))` 且 `appendEvent` 在短时间被多次调用，**有可能**读到同一次渲染里的同一个旧 `events`，导致**丢事件**（后一次覆盖前一次）。函数式更新能缓解这类 **stale state** 问题。
+
+#### 2. 本质是在做什么
+
+把新事件插到列表**最前**，并**截断为最多 80 条**；通过 **`setEvents(prev => ...)`** 基于**最新**旧列表生成新数组，**不修改**旧数组引用。
+
+#### 3. 发挥作用的原理（使用者视角）
+
+1. SSE 或流式回调里调用 `appendEvent(newEvent)`。  
+2. `setEvents` 将更新函数放入 React 的更新队列（具体调度依 React 18+ 自动批处理等策略）。  
+3. 在应用该更新时，React 传入**此时的最新 `events`** 作为 `previous`，计算 `next = [event, ...previous].slice(0, 80)`。  
+4. `events` state 更新 → 组件重渲染 → UI 显示新时间线。
+
+#### 4. 作用过程的底层原理
+
+- **批处理（batching）**：React 18 在多数场景下会对同一事件内的多次 `setState` 批处理，减少渲染次数；函数式更新使每次更新都能「看见」队列中已合并的前序结果（仍要注意 **Strict Mode** 下开发环境可能双调用等细节，但生产行为以官方文档为准）。  
+- **新数组引用**：只要 `event` 或 `previous` 与上次不同，`next` 是新引用，触发依赖 `events` 的子树更新；若用 `React.memo` 包裹列表项，还需注意子项 props 是否稳定。  
+- **时间复杂度**：每次追加 O(n) 复制与 `slice`，在 n≤80 时常可接受；若极大流量需另议（环形缓冲、仅存 id 等）。
+
+#### 5. 扩展知识与注意点
+
+- **与 `useReducer` 对比**：事件追加逻辑若变复杂（合并、去重、分页），可迁到 `reducer` 集中管理，便于测试。  
+- **错误写法示例**：`previous.push(event); setEvents(previous)` —— **禁止**，会破坏不可变约定，且可能不触发更新或引发难查 bug。  
+- **扩展阅读**：[React useState 文档 — Functional updates](https://react.dev/reference/react/useState#updating-state-based-on-the-previous-state)、[useMemo](https://react.dev/reference/react/useMemo)。
+
+---
+
+## SSE：`agent-service.openRunStream` 与 agent-server 运行流
+
+**相关代码**：
+
+- 前端：`src/apis/agent-service.ts` 中 `openRunStream`，以及 `src/pages/workspace/resource-organizer/index.tsx` 里创建运行后打开流、`handleStreamEvent` 更新 UI、`closeStream` 与卸载时 `EventSource.close()`。  
+- 后端：`agent-server` 中 `AgentController` 的 `@Sse('runs/:runId/stream')`、`AgentService.streamRun`、`AgentRunStoreService.publish` / `stream`，以及 `AgentService.executeRun` 在异步执行过程中持续 `publish` 各类事件。
+
+### 1. 必要概念 / 名词解释 / 背景知识
+
+- **SSE（Server-Sent Events）**  
+  基于 **HTTP** 的一种**服务端 → 客户端单向**实时推送机制。浏览器端用标准 API **`EventSource`** 发起**长时间保持打开的 GET 请求**；服务端响应头使用 **`Content-Type: text/event-stream`**，按 [SSE 文本格式](https://html.spec.whatwg.org/multipage/server-sent-events.html) 持续写入多段「事件」（每段可含 `event:`、`data:`、`id:` 等字段，以空行分隔）。
+
+- **与 WebSocket 的对比（选型背景）**  
+  SSE：**单向**（服务器推、客户端不能在同连接上随意上行）、基于 HTTP、自动重连行为由浏览器实现、协议简单。WebSocket：**全双工**、需协议升级。本场景只需把 Agent 执行进度推到前端，**无需客户端经同一条连接频繁上行**，SSE 足够且实现成本低。
+
+- **`EventSource`（浏览器）**  
+  构造函数 `new EventSource(url)` 会建立上述长连接。  
+  - 若服务端发送的行里带有 **`event: 某名字`**，则前端需 **`addEventListener('某名字', handler)`** 或 `onmessage`（仅针对**默认**事件名 `message`，即未指定 `event:` 时）。  
+  - 回调收到的是 **`MessageEvent`**，**有效载荷在 `event.data` 里，类型为字符串**（多行 `data:` 会按规范拼接）。因此若服务端推 JSON，前端通常 **`JSON.parse(messageEvent.data)`**。
+
+- **NestJS `@Sse()`**  
+  声明一个返回 **`Observable<MessageEvent>`** 的处理器；框架把 Observable 发出的每一项映射为 SSE 帧写到响应流。`MessageEvent` 一般包含 **`type`**（对应 SSE 的 **`event:`** 行）和 **`data`**（对应 **`data:`** 行；对象常被序列化为 JSON 字符串）。
+
+- **RxJS `Subject` / `Observable`（后端）**  
+  - **`Subject`**：多播源，既可 `next` 推事件，又可被 `subscribe`。  
+  - **`Observable`**：`stream(runId)` 里为**每个 HTTP 连接**创建一个 Observable，先**重放**已有事件，再**订阅**对应 `run` 的 `Subject`，把后续 `publish` 的事件继续转给该连接。
+
+- **`AgentRunEvent` 与 `streamEventTypes`（前端）**  
+  前端维护与后端一致的 **`type` 列表**（`run_started`、`plan_ready`、`step_started` 等），并为每一种 **`addEventListener(type, ...)`**，从而与 SSE 的「命名事件」一一对应。若后端新增类型而前端未注册监听，事件会被浏览器收到但**没有对应监听器**（除非改用 `onmessage` 且服务端不发送 `event:`，本项目中**不是**这种写法）。
+
+### 2. 本质是在做什么
+
+**一句话**：前端在拿到 `runId` 后，对 **`GET {AGENT_SERVER_BASE}/agent/runs/{runId}/stream`** 建立 **`EventSource`**；后端把该次 Agent 异步执行过程中产生的 **`AgentRunEvent`**，以 **SSE 命名事件 + JSON 数据** 的形式推给浏览器；页面在回调里 **`JSON.parse` 后分类型更新 React state**，实现「运行过程可视化」。连接错误或中断时，页面可 **`getRun` 拉快照**做补救（见 `onError` 逻辑）。
+
+### 3. 发挥作用的原理（端到端流程）
+
+下面按时间顺序描述**本仓库中的实际协作**（与代码一致）：
+
+1. **创建运行**  
+   前端 `POST /agent/runs`（经 `createClient` 封装的 `agentService.createRun`）。  
+   后端 `AgentService.createRun`：`runStore.create(runId)` 在内存里为该 `runId` 建 `StoredRun`（含空 `events` 数组 + **`Subject<AgentRunEvent>`**），然后 **`void executeRun(runId, request)`** 异步执行（不阻塞 HTTP 响应），立即 **`return { runId }`**。
+
+2. **打开事件流**  
+   前端拿到 `runId` 后调用 `openRunStream(runId, { onEvent, onError })`，内部 **`new EventSource(\`${AGENT_SERVER_BASE}/agent/runs/${runId}/stream\`)`**。  
+   浏览器对该 URL 发起 **GET**，后端 `AgentController.streamRun` 调用 `runStore.stream(runId)`，返回 **Observable**，Nest 以 SSE 形式写出。
+
+3. **后端如何产生事件**  
+   `executeRun` 在执行各阶段调用 **`runStore.publish(event)`**：把事件 **`push` 进 `run.events`（历史）**，并对 **`run.subject.next(event)`** 广播给**当前所有**已连接该 `runId` 的 SSE 订阅者。  
+   当事件类型为 **`run_completed` 或 `run_failed`** 时，`publish` 里还会 **`run.subject.complete()`**，结束该 run 的 Subject；之后 Observable 侧会 `complete`，**HTTP 流正常结束**。
+
+4. **`stream(runId)` 对新连接的行为（重要）**  
+   - 先 **`for (const event of run.events)`** 把**已经发生过的事件**逐个 `subscriber.next({ type: event.type, data: event })`，实现**晚连上的客户端也能看到历史**（至少看到 `publish` 当时已写入数组的部分）。  
+   - 若 `run.status` 已是 **`completed` / `failed`**，重放完后直接 **`subscriber.complete()`**，连接结束。  
+   - 否则 **`run.subject.subscribe(...)`**，把后续实时事件继续转成 `MessageEvent` 推给该连接；取消订阅时在 teardown 里 **`unsubscribe()`**。
+
+5. **前端如何把 SSE 变成 `AgentRunEvent`**  
+   对 `streamEventTypes` 中每种 `eventType`，`addEventListener(eventType, (event) => { ... JSON.parse((event as MessageEvent<string>).data) ... })`，统一交给 **`handlers.onEvent`**。  
+   页面里 **`handleStreamEvent`** 按 `event.type` `switch`，更新 `plan`、`events` 列表、`collectedResources` 等，并在 **`run_completed` / `run_failed`** 时收尾（关流、改 `status` 等）。
+
+6. **错误与断线**  
+   **`eventSource.onerror`** 会触发（网络错误、服务端关闭、CORS 问题等；具体频率与重连策略与浏览器实现有关）。本页 **`onError`** 里若运行尚未标记结束，会 **`getRun(runId)`**：若已有 **`result`** 则按完成处理；若状态为 **`failed`** 则展示失败；否则提示无法读取状态。同时 **`closeStream()`** 关闭 `EventSource`。
+
+### 4. 作用过程的底层原理（更贴近协议与实现）
+
+- **线上文本长什么样（概念上）**  
+  每一则逻辑事件大致对应 SSE 的一帧，例如（示意）：  
+  `event: plan_ready`  
+  `data: {"type":"plan_ready","runId":"...","payload":{...}}`  
+  空行  
+  浏览器解析后，在 `EventSource` 上触发名为 **`plan_ready`** 的 DOM 事件，`data` 为字符串形式的 JSON。
+
+- **为何 `data` 要 `JSON.parse`**  
+  SSE 规范里 **`data:` 负载是文本**；应用层约定为 JSON，则在 JS 里必须解析后才能得到结构化 `AgentRunEvent`。
+
+- **为何用 `addEventListener` 循环注册多种 `event:`**  
+  若只用 `onmessage`，只能收到**未命名**（默认 `message`）的事件。本项目后端为每种业务类型设置了 **`MessageEvent.type`**（映射到 SSE 的 `event:`），前端就必须按**同名事件**分别监听，才能在类型层面与 `AgentRunEvent['type']` 对齐。
+
+- **内存模型**  
+  当前实现中，每个 `run` 的事件历史保存在 **`AgentRunStoreService` 的 `Map`** 里；进程重启会丢失（除非另行做持久化）。SSE 连接是**每个浏览器标签页各一条**（每次 `openRunStream` 一个 `EventSource`）。
+
+### 5. 扩展知识与注意点
+
+- **CORS 与跨域**  
+  `EventSource` **默认不带** `fetch` 那套自定义 header；跨域时服务端需正确配置 **CORS**，且需注意是否允许凭证（`withCredentials`）。若 `AGENT_SERVER_BASE` 与前端不同源，需专门验证。
+
+- **`streamEventTypes` 与后端必须对齐**  
+  前端列表若**漏**某一 `type`，该类型事件到达时**没有监听器**，UI 会静默丢失这类更新。新增事件类型时应**同时**改后端 `publish`、前端类型定义与 `streamEventTypes`。
+
+- **浏览器自动重连**  
+  `EventSource` 在连接断开时**可能**自动重连（由浏览器实现，且与 HTTP 状态码等有关）。重连后会再次命中 `stream(runId)`：**先重放 `run.events`**。若 run 已结束，会快速 `complete`。若业务上不希望重复处理，需在客户端做**幂等**或**去重**（当前页面部分 state 用追加列表，重复重放可能导致重复项，视是否在「运行中」仅连一次而定；本流程通常在结束后 `close()`）。
+
+- **与 POST `createRun` 的关系**  
+  创建与流式是**两个 HTTP 请求**：先 POST 拿 `runId`，再 GET 开 SSE。中间若极慢，可能出现「流已连上但第一个事件尚未 `publish`」——属正常；`stream` 会等在 `subject` 上直到有事件或结束。
+
+- **`onerror` 的局限性**  
+  SSE 的 error 事件**不包含** HTTP 响应体细节；排查 404（`runId` 不存在）、5xx 需结合网络面板与后端日志。后端 `getStoredRun` 在无效 `runId` 上会 **`NotFoundException`**，连接会失败。
+
+- **扩展阅读**  
+  - [WHATWG — Server-sent events](https://html.spec.whatwg.org/multipage/server-sent-events.html)  
+  - [MDN — EventSource](https://developer.mozilla.org/zh-CN/docs/Web/API/EventSource)  
+  - [NestJS — Server-Sent Events](https://docs.nestjs.com/techniques/server-sent-events)
+
+---
+
 ## 问题与 Bug 记录
 
 ### react-refresh/only-export-components 报错（chatContext.tsx）
