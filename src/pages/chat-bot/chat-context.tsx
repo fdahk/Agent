@@ -2,6 +2,18 @@ import { createContext, useContext, useState } from 'react';
 import type { ReactNode } from 'react';
 import type { ChatMessage } from '@/apis/chat-bot-service';
 
+/**
+ * 该文件定义了聊天相关的 Context 结构、Provider 组件和 `useChatContext` 自定义 Hook。
+ * `createContext` 创建的是一个 Context 对象，用于描述这份上下文；
+ * `ChatContext.Provider` 是 `createContext` 创建出的 Context 对象自带的 Provider 组件，
+ * 用于将当前的上下文值传递给后代组件。
+ * 真正的聊天消息和对话状态是由 `ChatProvider` 内部的 `useState` 管理的，再通过 `ChatContext.Provider` 向下传递。
+ * 只有位于 `ChatContext.Provider` 组件树下的子组件，才能拿到这里提供的 Context 值；
+ * 否则读取到的将是 `createContext` 时传入的默认值（本文件里是 `undefined`）。
+ * 
+ * 这里额外封装了 `useChatContext`，用于统一消费 Context的方式，在脱离 Provider 使用时主动抛错。
+ */
+
 // 保存的对话接口
 export interface SavedChat {
   id: string;

@@ -11,7 +11,8 @@ function Layout() {
         <LeftNav />
         {/* 二级页面 */}
         <div style={{ flex: 1 }}>
-          <Outlet /> {/* 渲染子路由，不能直接通过 props 传递数据， */}
+          {/* 子路由组件渲染在这；由 React Router 根据当前匹配到的子路由自动注入，不是 Layout通过 props传入的 */}
+          <Outlet /> 
         </div>
       </div>
     </ChatProvider>

@@ -705,6 +705,1147 @@ if (typeof u === 'string') {
 
 ---
 
+## TypeScript 中 `interface` 与 `type` 的选择，以及什么叫“类型计算”
+
+本节回答两个问题：
+
+1. 是否“只有做类型计算时才用 `type`”
+2. TypeScript 里常见的“类型计算”到底有哪些
+
+先给结论：
+
+- **不是**只有做类型计算时才用 `type`
+- 但凡涉及**联合、交叉、映射、条件判断、类型提取、字符串拼接、元组变换、工具类型组合**这类操作时，通常都会以 `type` 为主
+- 如果只是定义一个“对象结构契约”，`interface` 和 `type` 通常都能做；很多团队会优先用 `interface` 表达对象形状，用 `type` 表达别名和类型运算结果
+
+---
+
+### 1. 必要概念 / 名词解释 / 背景知识
+
+#### 1. `interface` 是什么
+
+`interface` 主要用于描述**对象结构**或“某个实例应该长什么样”。例如：
+
+```ts
+interface User {
+  id: string;
+  name: string;
+}
+```
+
+它特别适合表达：
+
+- 对象字段
+- 方法签名
+- 类实现的契约
+- 可扩展的结构定义
+
+并且它支持 **`extends`** 和 **声明合并（declaration merging）**。
+
+#### 2. `type` 是什么
+
+`type` 是**类型别名**。它可以给任何类型起名字，而不仅仅是对象：
+
+```ts
+type UserId = string;
+type User = { id: string; name: string };
+type Status = 'idle' | 'loading' | 'success' | 'error';
+type Handler = (id: string) => void;
+```
+
+也就是说，`type` 可以表示：
+
+- 基础类型别名
+- 对象类型
+- 联合类型
+- 交叉类型
+- 函数类型
+- 元组类型
+- 条件类型
+- 映射类型
+- 模板字面量类型
+
+#### 3. 什么叫“类型计算”
+
+“类型计算”不是官方唯一术语，但在日常开发里通常指：
+
+- **不是手写一个静态类型**
+- 而是**基于已有类型，再推导出一个新类型**
+
+比如：
+
+```ts
+type A = { id: string; name: string };
+type B = keyof A;           // 'id' | 'name'
+type C = Partial<A>;        // { id?: string; name?: string }
+type D<T> = T extends string ? 1 : 0;
+```
+
+这里的 `B`、`C`、`D` 都不是“直接写死”的结构，而是通过已有类型推导得到的新类型，这就属于类型计算。
+
+---
+
+### 2. 本质是在做什么
+
+可以这样理解：
+
+- **`interface`** 更偏“描述一个对象应该长什么样”
+- **`type`** 更偏“给任意类型起名字，或者把已有类型加工成新类型”
+
+这里要补一个非常重要、也最容易被误解的结论：
+
+- **`interface` 和 `type` 的能力边界不是完全一样**
+- 它们在“普通对象结构”场景下有很大重叠，所以经常看起来像是可以互换
+- 但从完整能力范围来看，`type` 能表达的类型种类更多；`interface` 则在“对象接口语义”和“声明合并”上有自己独有的特点
+
+因此，不能简单理解成：
+
+- “`interface` 就是更标准的 `type`”
+- 或者“`type` 完全可以替代 `interface`”
+
+更准确的理解是：
+
+- **对象结构定义场景：两者大量重叠**
+- **类型系统表达能力场景：`type` 更广**
+- **接口扩展与声明合并场景：`interface` 更有特点**
+
+所以：
+
+- 如果你在写 `Context`、`Props`、接口返回对象、领域模型对象，这类“稳定对象结构”，常常会选 `interface`
+- 如果你在做“类型拼装”和“类型推导”，通常会选 `type`
+
+但这不是绝对规则。下面这种纯对象结构，也完全可以用 `type`：
+
+```ts
+type ChatContextType = {
+  messages: Message[];
+  clearChat: () => void;
+};
+```
+
+因此更准确的说法是：
+
+- **不是只有类型计算才用 `type`**
+- 而是**一旦需要类型计算，基本就会进入 `type` 的主场**
+
+---
+
+### 3. 发挥作用的原理（使用者视角）
+
+#### 1. 什么时候优先用 `interface`
+
+下面这些场景，通常优先考虑 `interface`：
+
+- 你在定义一个**对象契约**
+- 这个结构未来可能被 `extends`
+- 你希望语义上更像“接口”
+- 你在写 `class implements Xxx`
+- 你希望利用声明合并能力，type 不能这样重复定义，同名会直接报错。
+
+例如：
+
+```ts
+interface ChatContextType {
+  messages: ChatMessage[];
+  clearChat: () => void;
+  loadChat: (chatId: string) => void;
+}
+```
+
+这类类型的核心重点不是“算出来”，而是“规定 value 应该有哪些字段和方法”。
+
+#### 2. 什么时候优先用 `type`
+
+下面这些场景，通常优先考虑 `type`：
+
+- 你要给**基础类型**起别名
+- 你要定义**联合类型**
+- 你要定义**元组类型**
+- 你要写**函数类型**
+- 你要做**条件类型 / 映射类型 / 模板字面量类型**
+- 你要组合现有类型，生成新类型
+
+例如：
+
+```ts
+type ThemeMode = 'light' | 'dark';
+type RequestState = 'idle' | 'loading' | 'success' | 'error';
+type ClickHandler = (id: string) => void;
+type Pair = [string, number];
+```
+
+这些类型，`interface` 要么不能表达，要么表达起来不自然。
+
+#### 3. 一个实用判断标准
+
+实际开发里可以先用这套判断：
+
+1. **这是对象结构契约吗？**
+   是：先考虑 `interface`
+2. **这是联合 / 条件 / 映射 / 提取 / 拼接出来的类型吗？**
+   是：用 `type`
+3. **只是普通对象结构，但团队统一偏好 `type` 吗？**
+   也可以直接用 `type`
+
+换句话说：
+
+- `interface` 偏“定义结构”
+- `type` 偏“定义别名 + 做运算”
+
+---
+
+### 3.5 `type` 和 `interface` 的能力边界到底差在哪
+
+#### 1. 两者都能做的事
+
+最典型的是“定义普通对象结构”：
+
+```ts
+interface User {
+  id: string;
+  name: string;
+}
+```
+
+```ts
+type User = {
+  id: string;
+  name: string;
+};
+```
+
+再比如对象扩展，二者也都能完成：
+
+```ts
+interface BaseUser {
+  id: string;
+}
+
+interface User extends BaseUser {
+  name: string;
+}
+```
+
+```ts
+type BaseUser = { id: string };
+type User = BaseUser & { name: string };
+```
+
+虽然结果相近，但写法、语义和适用范围并不完全相同。
+
+#### 2. `type` 能做，但 `interface` 做不了或不擅长的事
+
+##### A. 给基础类型起别名
+
+```ts
+type UserId = string;
+type Price = number;
+```
+
+`interface` 不能直接表示“`string` 的别名”或“`number` 的别名”。
+
+##### B. 定义联合类型
+
+```ts
+type Status = 'idle' | 'loading' | 'success' | 'failed';
+type Result = string | number;
+```
+
+`interface` 不能直接表达“多个类型之一”。
+
+##### C. 定义元组类型
+
+```ts
+type Point = [number, number];
+type Pair = [string, boolean];
+```
+
+`interface` 不适合表达这种固定长度、固定位置含义的数组结构。
+
+##### D. 定义函数类型别名
+
+```ts
+type ClickHandler = (id: string) => void;
+```
+
+严格说 `interface` 也能写调用签名，但在“函数类型别名”场景里，`type` 更自然：
+
+```ts
+interface ClickHandler {
+  (id: string): void;
+}
+```
+
+所以上面这个例子更准确地说是：
+
+- `interface` 不是完全做不到
+- 但 `type` 更符合日常习惯，也更容易和其他类型运算组合
+
+##### E. 条件类型、映射类型、模板字面量类型
+
+```ts
+type IsString<T> = T extends string ? true : false;
+type PartialUser = { [K in keyof User]?: User[K] };
+type EventName = `on${Capitalize<'click' | 'focus'>}`;
+```
+
+这些都属于典型的类型计算能力，基本就是 `type` 的主场。
+
+##### F. 判别联合类型
+
+```ts
+type Event =
+  | { type: 'start'; payload: string }
+  | { type: 'end'; payload: number };
+```
+
+这也是 `type` 在业务开发里非常常见的能力，尤其适合事件流、状态机、接口返回结果等建模。
+
+#### 3. `interface` 能做，但 `type` 做不到的事
+
+##### A. 声明合并（Declaration Merging）
+
+这是 `interface` 最经典的独有特性。
+
+```ts
+interface User {
+  name: string;
+}
+
+interface User {
+  age: number;
+}
+```
+
+最终会自动合并成：
+
+```ts
+interface User {
+  name: string;
+  age: number;
+}
+```
+
+而 `type` 不能这样做：
+
+```ts
+type User = { name: string };
+type User = { age: number }; // 报错：重复定义
+```
+
+这也是为什么扩展全局 `Window`、第三方库接口补充声明时，经常要用 `interface`。
+
+##### B. 在“接口契约”语义上更直接
+
+虽然某些对象类型别名也能被 `implements`，例如：
+
+```ts
+type UserShape = {
+  id: string;
+  name: string;
+};
+
+class UserModel implements UserShape {
+  id = '1';
+  name = 'Tom';
+}
+```
+
+但在设计语义上，`interface` 更适合作为“类必须遵守的公共契约”：
+
+```ts
+interface UserShape {
+  id: string;
+  name: string;
+}
+
+class UserModel implements UserShape {
+  id = '1';
+  name = 'Tom';
+}
+```
+
+所以这里要注意区分：
+
+- **从语法上**：某些 `type` 也能被 `implements`
+- **从表达意图上**：`interface` 更像“给类看的接口约束”
+
+#### 4. 两者都能做，但语义侧重点不同的场景
+
+##### A. 对象扩展
+
+`interface` 常写：
+
+```ts
+interface Base {
+  id: string;
+}
+
+interface User extends Base {
+  name: string;
+}
+```
+
+`type` 常写：
+
+```ts
+type Base = { id: string };
+type User = Base & { name: string };
+```
+
+从结果上看都像“合并字段”，但本质不同：
+
+- `extends` 更偏“接口继承”
+- `&` 更偏“类型交叉，要求同时满足”
+
+在简单对象场景下结果通常类似，但复杂类型里语义差异会逐渐变大。
+
+##### B. 函数签名
+
+二者都可以写：
+
+```ts
+interface Handler {
+  (id: string): void;
+}
+```
+
+```ts
+type Handler = (id: string) => void;
+```
+
+但日常项目里：
+
+- 纯函数签名通常更常用 `type`
+- 对外暴露的对象/接口契约更常用 `interface`
+
+#### 5. 最终应该怎么理解
+
+如果把二者理解成“集合范围”，更接近事实的是：
+
+- `interface` 主要覆盖“对象结构接口”这块能力
+- `type` 覆盖“任意类型别名 + 类型计算”
+
+- 在对象结构定义这块有大量重叠
+- 在其他类型表达能力上，`type` 范围更广
+- 在声明合并与接口语义上，`interface` 有独特价值
+
+所以开发时最稳妥的判断不是“谁更标准”，而是：
+- 你现在在描述“一个对象契约”
+- 还是在表达“一个类型别名或类型运算结果”
+
+---
+
+### 4. 作用过程的底层原理（类型计算有哪些）
+
+下面按常见程度，把 TypeScript 里的主要类型计算方式系统列出来。
+
+#### 1. 联合类型（Union Type）
+
+表示“值可以是多种类型之一”。
+
+```ts
+type Status = 'idle' | 'loading' | 'success' | 'error';
+type Id = string | number;
+```
+
+作用：
+
+- 限定可选值范围
+- 表达多种可能状态
+- 为条件分支和类型收窄提供基础
+
+这是最常见的类型计算之一，`interface` 不适合做这个。
+
+#### 2. 交叉类型（Intersection Type）
+
+表示“把多个类型合并为一个类型，要求同时满足”。
+
+```ts
+type Base = { id: string };
+type Named = { name: string };
+type User = Base & Named;
+```
+
+结果相当于：
+
+```ts
+type User = {
+  id: string;
+  name: string;
+};
+```
+
+常用于：
+
+- 多个对象结构拼装
+- 组合通用字段
+- 给第三方类型附加本地字段
+
+#### 3. `keyof`
+
+提取一个对象类型的所有键，得到联合类型。
+
+```ts
+type User = { id: string; name: string; age: number };
+type UserKey = keyof User; // 'id' | 'name' | 'age'
+```
+
+常用于：
+
+- 限制只能传合法字段名
+- 和泛型配合，保证键名安全
+
+#### 4. 索引访问类型（Indexed Access Type）
+
+通过键去取某个类型中的某个字段类型。
+
+```ts
+type User = { id: string; name: string; age: number };
+type NameType = User['name']; // string
+type IdOrNameType = User['id' | 'name']; // string
+```
+
+常用于：
+
+- 复用某个字段的类型
+- 避免重复手写
+
+#### 5. 泛型（Generics）
+
+泛型本身不一定等于类型计算，但它是大多数类型计算的基础。
+
+```ts
+type ApiResponse<T> = {
+  code: number;
+  data: T;
+};
+```
+
+这里的 `T` 是“待填入的类型参数”，让类型具备可复用性和可推导性。
+
+#### 6. 条件类型（Conditional Type）
+
+按条件选择不同的结果类型。
+
+```ts
+type IsString<T> = T extends string ? true : false;
+
+type A = IsString<'abc'>; // true
+type B = IsString<123>;   // false
+```
+
+这是 TypeScript 类型系统里非常核心的一类运算。
+
+常用于：
+
+- 根据输入类型决定输出类型
+- 实现工具类型
+- 结合 `infer` 做类型提取
+
+#### 7. 分布式条件类型（Distributive Conditional Types）
+
+当条件类型作用于联合类型，并且左侧是“裸类型参数”时，会对联合中的每一项分别计算。
+
+```ts
+type Wrap<T> = T extends string ? { value: T } : never;
+type Result = Wrap<'a' | 1>;
+// { value: 'a' } | never
+// 最终等价于 { value: 'a' }
+```
+
+先从最基础的语法拆开看：
+
+```ts
+type Wrap<T> = T extends string ? { value: T } : never;
+```
+- `T extends string ? A : B`：条件类型。意思是“如果 `T` 能赋值给 `string`，结果就是 `A`，否则就是 `B`”
+- `never`：条件不成立时返回“无结果类型”
+
+先不要看联合类型，先看单个类型时它怎么工作：
+
+```ts
+type A = Wrap<'a'>; // { value: 'a' }
+type B = Wrap<1>;   // never
+```
+
+也就是说：
+
+- 当 `T = 'a'` 时，`'a' extends string` 成立，所以结果是 `{ value: 'a' }`
+- 当 `T = 1` 时，`1 extends string` 不成立，所以结果是 `never`
+
+接着再看：
+
+```ts
+type Result = Wrap<'a' | 1>;
+```
+
+为什么它会“拆开分别算”？原因就在于这里的 `T` 是一个**裸类型参数**。
+
+所谓“裸类型参数”，指的是：
+
+- `T extends ... ? ... : ...`
+
+左侧直接就是 `T` 本身，没有被包进别的结构里。比如下面是裸的：
+
+```ts
+T extends string ? A : B
+```
+
+下面则不是裸的：
+
+```ts
+[T] extends [string] ? A : B
+Promise<T> extends Promise<string> ? A : B
+```
+
+当左侧是裸类型参数，且传入的是联合类型 `'a' | 1` 时，TypeScript 会自动按下面方式分发：
+
+```ts
+Wrap<'a' | 1>
+// 等价于
+Wrap<'a'> | Wrap<1>
+// 再分别代入
+({ value: 'a' }) | never
+// 最后化简
+{ value: 'a' }
+```
+
+这里还涉及一个基础点：`never` 在联合类型里会被“吸收”掉：
+
+```ts
+type X = string | never; // 最终就是 string
+```
+
+所以 `{ value: 'a' } | never` 最终只剩 `{ value: 'a' }`。
+
+如果你**不想让它分布**，最常见的做法就是把 `T` 包起来：
+
+```ts
+type WrapNonDist<T> = [T] extends [string] ? { value: T } : never;
+
+type A = WrapNonDist<'a' | 1>; // never
+```
+
+为什么这次变成 `never`？
+
+- 因为现在判断的是 `['a' | 1] extends [string]`
+- 这里不再对联合成员逐个计算
+- 而是把整个 `'a' | 1` 当成一个整体判断
+- `'a' | 1` 并不能整体赋值给 `string`
+- 所以结果是 `never`
+
+它是很多高级工具类型看起来“自动展开”的根源。
+
+#### 8. `infer` 类型推断
+
+在条件类型中临时声明一个待推断的类型变量，再把它提取出来。
+
+```ts
+type GetReturnType<T> = T extends (...args: any[]) => infer R ? R : never;
+
+type Fn = (id: string) => Promise<number>;
+type Result = GetReturnType<Fn>; // Promise<number>
+```
+
+先拆语法：
+
+```ts
+type GetReturnType<T> = T extends (...args: any[]) => infer R ? R : never;
+```
+- `type GetReturnType<T>`：定义一个泛型类型工具，名字叫 `GetReturnType`
+- `(...args: any[]) => infer R`：这里描述的是“任意参数的函数类型，并把它的返回值类型记为 `R`”
+- `infer R`：意思是“如果能匹配成功，请帮我把这里的类型推断出来，并命名为 `R`”
+- `? R : never`：如果匹配成功，就返回推断出的 `R`；否则返回 `never`
+
+先看一个普通函数类型：
+
+```ts
+type Fn = (id: string) => Promise<number>;
+```
+
+它长这样：
+
+- 参数：`(id: string)`
+- 返回值：`Promise<number>`
+
+当代入 `GetReturnType<Fn>` 时，TypeScript 会尝试把 `Fn` 去匹配这个模板：
+
+```ts
+(...args: any[]) => infer R
+```
+
+匹配过程可以理解成：
+- `Fn` 确实是一个函数类型，匹配成功
+- 参数部分不关心具体类型，所以用 `...args: any[]` 占位即可
+- 返回值位置看到的是 `Promise<number>`
+- 因此把 `R` 推断成 `Promise<number>`
+
+所以最终得到：
+
+```ts
+type Result = Promise<number>;
+```
+
+这里最关键的认识是：`infer` 不是“手动指定类型”，而是“让 TypeScript 在匹配结构时，顺手把某个位置的类型抓出来”。
+
+还可以看几个更基础的例子：
+
+提取数组元素类型：
+
+```ts
+type ElementType<T> = T extends (infer U)[] ? U : never;
+
+type A = ElementType<string[]>; // string
+type B = ElementType<number[]>; // number
+```
+
+提取 Promise 内部类型：
+
+```ts
+type UnwrapPromise<T> = T extends Promise<infer U> ? U : T;
+
+type A = UnwrapPromise<Promise<number>>; // number
+type B = UnwrapPromise<string>;          // string
+```
+
+提取元组第一个元素：
+
+```ts
+type First<T> = T extends [infer H, ...unknown[]] ? H : never;
+
+type A = First<[string, number]>; // string
+```
+
+因此，`infer` 的常见使用模式可以概括为：
+
+1. 先写一个“待匹配的类型模板”
+2. 在你想提取的位置写 `infer Xxx`
+3. 匹配成功后，就能在 `?` 分支里使用这个推断出的类型变量
+
+常用于提取：
+
+- 函数返回值
+- Promise 包裹的内部类型
+- 数组元素类型
+- 元组的头尾
+
+#### 9. 映射类型（Mapped Type）
+
+遍历一个联合键集合，批量生成新对象类型。
+
+```ts
+type User = { id: string; name: string };
+
+type OptionalUser = {
+  [K in keyof User]?: User[K];
+};
+```
+
+这相当于手写了：
+
+```ts
+type OptionalUser = {
+  id?: string;
+  name?: string;
+};
+```
+
+这里的基础语法需要一层层拆开看：
+
+```ts
+type OptionalUser = {
+  [K in keyof User]?: User[K];
+};
+```
+
+逐段解释：
+
+- `keyof User`：取出 `User` 的所有键，结果是联合类型 `'id' | 'name'`
+- `K in keyof User`：表示“让 `K` 依次遍历这些键”
+- `[K in ...]`：这是映射类型的核心语法，表示“按键集合批量生成属性”
+- `?:`：表示生成出来的每个属性都是可选的
+- `User[K]`：索引访问类型，表示“取 `User` 中键 `K` 对应的值类型”
+
+所以映射类型的本质就是：
+
+- 先拿到一组键
+- 再按同一套规则把这些键批量变成新的对象属性
+
+这就是为什么它特别适合做“批量改造对象类型”。
+
+例如，去掉可选标记：
+
+```ts
+type RequiredUser = {
+  [K in keyof User]-?: User[K];
+};
+```
+
+这里的 `-?` 表示“移除可选标记”。
+
+再比如加只读：
+
+```ts
+type ReadonlyUser = {
+  readonly [K in keyof User]: User[K];
+};
+```
+
+所以你可以把映射类型理解成：**for 循环版的对象类型生成器**，只不过这个“循环”发生在类型层面，而不是运行时。
+
+标准库中的 `Partial<T>`、`Required<T>`、`Readonly<T>` 本质上都基于映射类型。
+
+#### 10. 映射类型中的键重映射（Key Remapping）
+
+可以在映射过程中重新生成键名。
+
+```ts
+type EventHandlers<T> = {
+  [K in keyof T as `on${Capitalize<string & K>}`]: (value: T[K]) => void;
+};
+
+type FormFields = { name: string; age: number };
+type Handlers = EventHandlers<FormFields>;
+```
+
+结果类似：
+
+```ts
+type Handlers = {
+  onName: (value: string) => void;
+  onAge: (value: number) => void;
+};
+```
+
+#### 11. 模板字面量类型（Template Literal Type）
+
+像字符串模板一样拼接类型层面的字符串。
+
+```ts
+type Size = 'sm' | 'md' | 'lg';
+type ClassName = `btn-${Size}`;
+// 'btn-sm' | 'btn-md' | 'btn-lg'
+```
+
+它的基础语法和 JavaScript 模板字符串非常像：
+
+```ts
+type X = `prefix-${Something}`;
+```
+
+但区别在于：
+
+- JS 模板字符串是在**运行时**拼接字符串值
+- TypeScript 模板字面量类型是在**编译期**拼接字符串类型
+
+先看最简单的情况：
+
+```ts
+type Name = 'Tom';
+type Greeting = `hello-${Name}`; // 'hello-Tom'
+```
+
+如果 `${}` 里的不是单个字符串字面量，而是联合类型，就会对联合里的每一项分别展开：
+
+```ts
+type Size = 'sm' | 'md' | 'lg';
+type ClassName = `btn-${Size}`;
+```
+
+展开过程可以理解成：
+
+```ts
+type ClassName =
+  | 'btn-sm'
+  | 'btn-md'
+  | 'btn-lg';
+```
+
+这也是一种“分布式展开”，只是发生在模板字面量类型里。
+
+它不仅能在尾部拼接，也能多段组合：
+
+```ts
+type Event = 'click' | 'focus';
+type Phase = 'capture' | 'bubble';
+type EventName = `${Event}:${Phase}`;
+```
+
+结果会是：
+
+```ts
+type EventName =
+  | 'click:capture'
+  | 'click:bubble'
+  | 'focus:capture'
+  | 'focus:bubble';
+```
+
+也就是说，联合类型在多个插槽里会做“笛卡尔积式”的组合。
+
+模板字面量类型常与这些工具一起使用：
+
+- `Capitalize<T>`：首字母大写
+- `Uncapitalize<T>`：首字母小写
+- `Uppercase<T>`：全部大写
+- `Lowercase<T>`：全部小写
+
+例如：
+
+```ts
+type Field = 'name' | 'age';
+type Setter = `set${Capitalize<Field>}`;
+// 'setName' | 'setAge'
+```
+
+因此可以把模板字面量类型理解为：**在类型层面批量生成符合命名规则的字符串联合类型**。
+
+常用于：
+
+- 事件名
+- class name 约束
+- API 路径片段
+- 字段命名规则推导
+
+#### 12. 工具类型（Utility Types）
+
+官方内置了很多常用类型计算，本质上也是由前面的能力组合实现的。
+
+常见工具类型包括：
+
+- `Partial<T>`：全部字段改成可选
+- `Required<T>`：全部字段改成必填
+- `Readonly<T>`：全部字段改成只读
+- `Pick<T, K>`：只挑出部分字段
+- `Omit<T, K>`：排除部分字段
+- `Record<K, V>`：用键集合生成对象类型
+- `Exclude<T, U>`：从联合类型中排除某些成员
+- `Extract<T, U>`：从联合类型中提取某些成员
+- `NonNullable<T>`：排除 `null | undefined`
+- `Parameters<T>`：提取函数参数元组
+- `ReturnType<T>`：提取函数返回值
+- `InstanceType<T>`：提取构造函数实例类型
+- `Awaited<T>`：提取 Promise 最终解析值
+
+例如：
+
+```ts
+type User = { id: string; name: string; age: number };
+
+type UserPreview = Pick<User, 'id' | 'name'>;
+type UserDraft = Partial<User>;
+type UserMap = Record<string, User>;
+```
+
+#### 13. 元组与可变参数类型（Tuple / Variadic Tuple）
+
+元组也可以参与类型计算。
+
+```ts
+type Head<T extends unknown[]> = T extends [infer H, ...unknown[]] ? H : never;
+type Tail<T extends unknown[]> = T extends [unknown, ...infer R] ? R : never;
+
+type A = Head<[string, number, boolean]>; // string
+type B = Tail<[string, number, boolean]>; // [number, boolean]
+```
+
+这在函数参数、Hook 返回值、事件元组中很常见。
+
+#### 14. 递归类型（Recursive Type）
+
+类型也可以递归定义，处理嵌套结构。
+
+```ts
+type TreeNode = {
+  id: string;
+  children?: TreeNode[];
+};
+```
+
+更复杂时，还可以递归地做类型变换，例如“把任意嵌套对象全部变成只读”。
+
+#### 15. `typeof`（类型查询）
+
+这里说的是 **TypeScript 类型层面的 `typeof`**，不是运行时的 JS `typeof`。
+
+```ts
+const defaultUser = {
+  id: '1',
+  name: 'Tom',
+};
+
+type DefaultUser = typeof defaultUser;
+```
+
+这表示“直接根据已有变量的形状生成类型”，避免重复写一份。
+
+#### 16. `as const` 带来的字面量收窄
+
+严格说它不是一种独立的类型计算语法，但它经常参与类型推导。
+
+```ts
+const roles = ['admin', 'user', 'guest'] as const;
+type Role = typeof roles[number];
+// 'admin' | 'user' | 'guest'
+```
+
+这一小段其实同时用了 3 个基础点：
+
+1. `as const`
+2. 类型层面的 `typeof`
+3. `T[number]` 这种索引访问写法
+
+先看如果**没有** `as const`：
+
+```ts
+const roles = ['admin', 'user', 'guest'];
+```
+
+这时 TypeScript 通常会把它推断为：
+
+```ts
+string[]
+```
+
+为什么不是 `['admin', 'user', 'guest']`？
+
+- 因为默认推断会偏向“可变数组”
+- 既然是可变数组，将来你可能还会 `push('super-admin')`
+- 那么每一项的类型就不能只限定为这 3 个字面量，只能放宽成 `string`
+
+而写成：
+
+```ts
+const roles = ['admin', 'user', 'guest'] as const;
+```
+
+`as const` 表示告诉 TypeScript：
+
+- 请把这个值尽量按“最具体的字面量”来推断
+- 不要把 `'admin'` 放宽成 `string`
+- 不要把数组放宽成可变数组
+
+因此它会被推断为一个**只读元组**：
+
+```ts
+readonly ['admin', 'user', 'guest']
+```
+
+接着看：
+
+```ts
+type Role = typeof roles[number];
+```
+
+这里又要拆成两部分。
+
+第一部分：
+
+```ts
+typeof roles
+```
+
+这是 TypeScript 类型层面的 `typeof`，意思是“拿到变量 `roles` 的类型”。
+
+所以：
+
+```ts
+type RolesType = typeof roles;
+// readonly ['admin', 'user', 'guest']
+```
+
+第二部分：
+
+```ts
+typeof roles[number]
+```
+
+这里的 `[number]` 不是在取某个具体下标，而是在说：
+
+- “如果用任意数字索引去访问这个数组/元组”
+- “能取到的元素类型是什么”
+
+先看普通数组：
+
+```ts
+type A = string[][number]; // string
+```
+
+因为任意下标取出来都是 `string`。
+
+再看元组：
+
+```ts
+type B = ['admin', 'user', 'guest'][number];
+// 'admin' | 'user' | 'guest'
+```
+
+因为对这个元组使用任意数字索引，可能拿到第 0、1、2 项中的任意一个，所以结果就是它们的联合类型。
+
+因此完整过程是：
+
+```ts
+const roles = ['admin', 'user', 'guest'] as const;
+
+type RolesType = typeof roles;
+// readonly ['admin', 'user', 'guest']
+
+type Role = RolesType[number];
+// 'admin' | 'user' | 'guest'
+```
+
+这就是为什么这套写法常用于：
+
+- 从常量数组生成联合类型
+- 保证“值列表”和“类型列表”只维护一份
+- 避免手写重复的 `'admin' | 'user' | 'guest'`
+
+例如：
+
+```ts
+const statusList = ['idle', 'loading', 'success', 'error'] as const;
+type Status = typeof statusList[number];
+```
+
+这样以后你只要维护 `statusList`，`Status` 会自动同步。
+
+这是一种非常常见的“从常量值反推出联合类型”的写法。
+
+---
+
+### 5. 扩展知识与注意点
+
+1. **不要把 `interface` 和 `type` 理解成“谁高级谁低级”**  
+   它们是能力有重叠、各有擅长的两套语法。不是“`type` 更先进，所以应该全面替代 `interface`”。
+
+2. **“对象结构一律用 interface”也不是铁律**  
+   很多团队为了统一风格，会全部使用 `type` 来定义对象结构，这完全可行。关键是团队约定一致，而不是语法教条。
+
+3. **只要涉及联合类型，基本就进入 `type` 范畴**  
+   比如 `type Status = 'idle' | 'loading'`，这种写法是 `interface` 无法替代的。
+
+4. **大部分高级工具类型，本质都是在做类型计算**  
+   例如 `Pick`、`Omit`、`ReturnType`、`Awaited`，不要只把“条件类型”狭义地理解成类型计算。
+
+5. **类型计算发生在编译期，不会带来运行时开销**  
+   这些运算在 TypeScript 编译后都会被擦除，不会生成额外 JavaScript 逻辑。它们的价值是提高 IDE 提示与编译期安全性。
+
+6. **类型计算写得太复杂会损害可读性**  
+   如果一个类型需要套很多层 `infer`、条件类型、模板字面量，虽然“能算出来”，但不一定适合团队维护。实践中要在“强类型”与“可理解性”之间平衡。
+
+7. **针对你当前这个问题的实用结论**  
+   `ChatContextType` 这种场景并不是因为“只能用 `interface`”，而是因为它在表达一个稳定的对象契约，所以用 `interface` 很自然。  
+   如果你后面要写例如：
+   - `type ChatAction = 'clear' | 'save' | 'load'`
+   - `type PartialChat = Partial<ChatContextType>`
+   - `type ChatKeys = keyof ChatContextType`
+   - `type HandlerName = \`on${Capitalize<ChatKeys>}\``
+   
+   这些就明显属于“类型计算”或“类型推导”场景，通常会用 `type`。
+
+---
+
 # Flutter 初始技术说明
 
 ## 初始化
@@ -2696,6 +3837,429 @@ createBrowserRouter([
 3. **与状态的关系**：路由是「入口状态」；页面内业务状态仍建议用 Context/Redux 等管理，避免把太多状态塞进 URL 或 `location.state`。
 4. **Loader / 错误边界**：v6 数据路由支持在路由上配置 `loader`（数据预加载）和 `errorElement`（该段路由出错时显示的 UI），后续若要做按路由拉数、统一错误页，可在此扩展。
 5. **当前项目**：入口在 `App.tsx` 的 `RouterProvider`，路由表在 `src/router/index.tsx`，布局与子路由占位在 `Layout` 的 `Outlet`，跳转多用 `useNavigate`，与上述说明一致。
+
+---
+
+## `createBrowserRouter` 详解（从底层原理与运行机制看）
+
+本节专门解释 React Router v6 数据路由 API 里的 `createBrowserRouter`：它到底创建了什么、为什么能根据 URL 自动切换页面、它和 `RouterProvider`、`History API`、`Outlet` 分别如何协作。
+
+```ts
+import { createBrowserRouter } from 'react-router-dom';
+
+export const router = createBrowserRouter([
+  {
+    path: '/',
+    element: <Layout />,
+    children: [
+      { path: '/', element: <ChatBotPage /> },
+      { path: '/expand', element: <ExpandPage /> },
+      { path: '/workspace', element: <WorkspacePage /> },
+    ],
+  },
+]);
+```
+
+---
+
+### 1. 必要概念 / 名词解释 / 背景知识
+
+#### 1. `createBrowserRouter` 是什么
+
+`createBrowserRouter` 是 React Router 提供的一个工厂函数，用来基于**路由配置对象数组**创建一个“浏览器环境下可运行的路由器实例（router instance）”。
+
+这里要特别注意：
+
+- 它**不是组件**
+- 它**不是 Hook**
+- 它返回的也不是 JSX
+
+它返回的是一个**路由器对象**，这个对象内部封装了：
+
+- 当前地址信息（location）
+- 当前匹配到的路由结果（matches）
+- 导航方法（navigate）
+- 对浏览器历史记录的订阅
+- 对 loader / action / 错误边界等数据路由能力的调度逻辑
+
+也就是说，`createBrowserRouter(...)` 的职责不是“直接渲染页面”，而是先把“路由规则 + 浏览器历史机制 + 当前状态管理”组织成一个可运行对象。
+
+#### 2. 为什么名字里有 `Browser`
+
+`Browser` 表示它是基于浏览器原生的 **History API** 工作的。
+
+它主要依赖：
+
+- `window.location`
+- `history.pushState`
+- `history.replaceState`
+- `popstate` 事件
+
+因此它适用于：
+
+- 正常的浏览器 SPA
+- 希望 URL 看起来像 `/workspace/resource-organizer`
+- 不想使用 `/#/path` 这种 hash 路由格式
+
+相对地：
+
+- `createHashRouter` 使用 `hash` 做路由
+- `createMemoryRouter` 使用内存中的地址栈，常用于测试或非浏览器环境
+
+#### 3. 什么叫“数据路由”（Data Router）
+
+React Router v6 后期把路由器能力分成两类理解方式：
+
+- 旧的声明式路由：`<BrowserRouter><Routes>...</Routes></BrowserRouter>`
+- 数据路由：`createBrowserRouter(...) + <RouterProvider router={router} />`
+
+数据路由的核心特点是：
+
+- 路由先被定义成一份“配置数据”
+- 再由 router 实例统一管理匹配、导航、数据加载、错误处理
+
+它比纯 JSX 路由树更适合做：
+
+- `loader`
+- `action`
+- `defer`
+- 路由级错误边界
+- 统一导航状态管理
+
+#### 4. 路由配置对象在描述什么
+
+`createBrowserRouter([...])` 接收的是一个“路由描述树”。
+
+每个配置项通常描述：
+
+- `path`：匹配哪段 URL
+- `element`：匹配后渲染哪个 React 元素
+- `children`：有哪些子路由
+- `loader`：进入该路由前如何加载数据
+- `action`：表单提交等动作如何处理
+- `errorElement`：这段路由出错时渲染什么
+
+所以这份配置本质上不是“立即执行的 UI 代码”，而是一份“路由规则说明书”。
+
+---
+
+### 2. 本质是在做什么
+
+一句话概括：
+
+`createBrowserRouter` 本质上是在做三件事：
+
+1. **把你的路由配置编译/整理成一棵可匹配的路由树**
+2. **把浏览器 URL 变化接入到这套路由树中**
+3. **生成一个可被 `RouterProvider` 驱动的 router 实例**
+
+所以它解决的问题是：
+
+- 当前 URL 是什么？
+- 这个 URL 应该匹配到哪一条父子路由链？
+- 对应应该渲染哪些组件？
+- 导航、前进、后退、刷新时应该如何重新匹配？
+
+如果没有它，你就得自己处理：
+
+- 监听 `popstate`
+- 读取 `window.location.pathname`
+- 自己写路径匹配算法
+- 自己维护当前页面状态
+- 自己处理嵌套路由渲染关系
+
+`createBrowserRouter` 就是把这些工作统一封装起来。
+
+---
+
+### 3. 发挥作用的原理（从使用者视角）
+
+#### 1. 应用启动时发生了什么
+
+当模块执行到：
+
+```ts
+export const router = createBrowserRouter([...]);
+```
+
+会立即创建一个 router 实例。
+
+这个实例内部会先做几类准备工作：
+
+- 读取路由配置
+- 规范化每个 route 对象
+- 建立父子关系
+- 生成内部路由树
+- 准备浏览器历史记录适配器
+- 读取当前 `window.location`
+
+此时它已经“知道”：
+
+- 当前地址是什么
+- 这份地址应该去哪棵路由树里找匹配
+
+但它还没有真正把 UI 挂到页面上，因为渲染工作还需要 `RouterProvider`。
+
+#### 2. `RouterProvider` 做了什么
+
+当根组件里写：
+
+```tsx
+<RouterProvider router={router} />
+```
+
+`RouterProvider` 会做两件关键事：
+
+1. **订阅 router 的状态变化**
+2. **把 router 当前状态通过 React Context 提供给整棵组件树**
+
+于是下层组件才能使用：
+
+- `useNavigate`
+- `useLocation`
+- `useParams`
+- `useMatches`
+- `Outlet`
+
+等一系列路由能力。
+
+可以把两者关系理解为：
+
+- `createBrowserRouter`：创建“发动机 + 状态机”
+- `RouterProvider`：把发动机接到 React 页面上，并在状态变化时触发重渲染
+
+#### 3. 首次渲染为什么能显示正确页面
+
+首次进入应用时，router 会读取：
+
+- `window.location.pathname`
+- `window.location.search`
+- `window.location.hash`
+
+然后对照路由树做匹配。
+
+例如当前地址是：
+
+```txt
+/workspace/resource-organizer
+```
+
+它会从根路由开始逐层匹配，得到类似这样的匹配链：
+
+1. 根路由 `/` → `Layout`
+2. 子路由 `/workspace/resource-organizer` → `ResourceOrganizerPage`
+
+随后 `RouterProvider` 根据这条匹配链渲染对应的 React 元素树。
+
+如果父路由组件里有 `Outlet`，那么：
+
+- 父路由的 `element` 先渲染
+- 子路由匹配到的 `element` 再通过 `Outlet` 注入进去
+
+因此你会看到：
+
+- 外层布局始终在
+- 内容区跟着路由变化
+
+#### 4. 点击跳转时为什么不会整页刷新
+
+当用户点击 `<Link to="/expand" />`，或者代码里执行：
+
+```ts
+navigate('/expand');
+```
+
+React Router 不会让浏览器按默认 `<a>` 行为去整页请求新 HTML，而是：
+
+1. 阻止默认整页跳转
+2. 调用 `history.pushState(...)` 或 `history.replaceState(...)`
+3. 更新浏览器地址栏
+4. 通知 router 当前 location 已变化
+5. 重新做一轮路由匹配
+6. 把新的匹配结果写入 router 状态
+7. 由 `RouterProvider` 触发 React 重渲染
+
+因此页面看起来“切换了”，但本质上仍是同一个 SPA 应用实例在更新 UI。
+
+#### 5. 浏览器前进/后退为什么也能同步 UI
+
+当用户点击浏览器前进/后退按钮时，浏览器会触发 `popstate`。
+
+router 内部已经订阅了这类事件，所以会：
+
+1. 感知到历史记录位置变化
+2. 重新读取当前 URL
+3. 再次匹配路由树
+4. 更新内部状态
+5. 通知 `RouterProvider`
+
+所以 UI 会自动同步回对应页面。
+
+---
+
+### 4. 作用过程的底层原理（更贴近实现机制）
+
+#### 1. 它创建的不是“页面”，而是一个状态机
+
+从底层看，`createBrowserRouter` 更接近在创建一个“路由状态机”。
+
+这个状态机至少维护这些核心状态：
+
+- 当前 location
+- 当前 matches
+- 当前 navigation 状态（idle / loading / submitting 等）
+- 当前 loaderData / actionData
+- 当前错误状态
+
+也就是说，React Router 并不是每次都“从零临时决定渲染谁”，而是有一个长期存在的 router 对象在维护路由运行状态。
+
+#### 2. 路由匹配不是简单字符串相等
+
+底层匹配过程通常会做这些事：
+
+1. 把 URL pathname 按 `/` 分段
+2. 把路由配置也整理成可匹配的路径模式
+3. 按嵌套路由树递归匹配
+4. 处理：
+   - 静态路径
+   - 动态参数（如 `:id`）
+   - index 路由
+   - splat / 通配段（如 `*`）
+5. 生成最终匹配链 `matches`
+
+`matches` 不是单个节点，而是一条从父到子的有序链。
+
+例如：
+
+- 根布局
+- 工作区页
+- 资源整理页
+
+这三层有可能同时都在匹配链里。
+
+正是因为有这条链，`Outlet` 才能知道“我这里该渲染哪个下一层路由”。
+
+#### 3. `Outlet` 背后的本质
+
+很多人会把 `Outlet` 理解为“一个普通占位符”，但更准确地说：
+
+- `Outlet` 是对“当前匹配链中下一层 route element”的消费入口
+
+它依赖的是 router 当前上下文中的匹配结果。
+
+当父路由元素渲染时，`Outlet` 会去读当前匹配链，并把下一层匹配到的元素插进去。
+
+所以不是“子组件主动塞进父组件”，而是：
+
+- router 先算出完整匹配链
+- `RouterProvider` 把链放进上下文
+- 每一层 `Outlet` 再从上下文里消费下一层内容
+
+#### 4. 浏览器模式依赖服务器兜底
+
+因为 `createBrowserRouter` 使用的是标准路径，如：
+
+```txt
+/expand
+/workspace
+/workspace/resource-organizer
+```
+
+当你在浏览器里直接刷新这些路径时，浏览器会先向服务器请求对应 URL。
+
+如果服务器没有配置“把这些前端路由都回退到 `index.html`”，就会出现：
+
+- 开发环境也许没问题
+- 生产环境刷新子路径直接 404
+
+这不是 React Router 自身的错误，而是 Browser History 模式的天然要求。
+
+所以它依赖的完整机制其实是：
+
+1. 服务器先总是返回同一个前端入口 HTML
+2. 前端 JS 启动
+3. `createBrowserRouter` 再根据当前 URL 做客户端匹配
+
+#### 5. 为什么说它比 `<BrowserRouter>` 更“数据驱动”
+
+旧写法里：
+
+```tsx
+<BrowserRouter>
+  <Routes>
+    <Route path="/" element={<Layout />}>
+      <Route path="/expand" element={<ExpandPage />} />
+    </Route>
+  </Routes>
+</BrowserRouter>
+```
+
+路由规则本身是嵌在 JSX 里的。
+
+而 `createBrowserRouter` 方案里：
+
+- 路由先被表示成配置数据
+- 再被创建成 router 实例
+- 最后由 `RouterProvider` 消费
+
+这让 React Router 更容易在“渲染前”就组织好：
+
+- loader 执行
+- action 提交
+- 错误边界
+- 导航状态
+- 预取和重验证逻辑
+
+换句话说，它把“路由”从纯 UI 声明提升成了一个更完整的运行时调度系统。
+
+#### 6. 从当前项目看一次完整链路
+
+结合当前项目，访问 `/workspace/resource-organizer` 时，可以把底层运行链路理解为：
+
+1. 应用入口加载并执行 `src/router/index.tsx`
+2. `createBrowserRouter([...])` 创建 router 实例
+3. 根组件中的 `RouterProvider` 订阅该 router
+4. router 读取 `window.location.pathname`
+5. 路由匹配算法得到：
+   - `/` → `Layout`
+   - `/workspace/resource-organizer` → `ResourceOrganizerPage`
+6. `RouterProvider` 触发渲染
+7. `Layout` 先渲染
+8. `Layout` 内部的 `Outlet` 再渲染 `ResourceOrganizerPage`
+
+之后如果调用 `navigate('/expand')`，则：
+
+1. router 调用 `history.pushState`
+2. 浏览器地址变成 `/expand`
+3. router 重新匹配
+4. 匹配链变成：
+   - `/` → `Layout`
+   - `/expand` → `ExpandPage`
+5. React 更新 `Outlet` 对应内容区
+
+所以切换的是“匹配链和对应渲染分支”，不是整棵应用被销毁重建。
+
+---
+
+### 5. 扩展知识与注意点
+
+1. **`createBrowserRouter` 本身不负责挂载到页面**  
+   它只负责创建 router；真正把它接入 React 渲染树的是 `RouterProvider`。
+
+2. **它创建 router 的时机是模块求值时**  
+   如果你在模块顶层 `export const router = createBrowserRouter(...)`，那这个 router 会在该模块第一次被 import 并求值时创建，而不是等到某个组件点击后才创建。
+
+3. **父路由稳定、子路由切换是嵌套路由最常见效果**  
+   这也是为什么项目里 `Layout` 适合作为父路由，页面内容作为 `children`。
+
+4. **刷新子路径是否 404，不取决于路由配置本身是否写对**  
+   很多时候是服务器没有做 SPA fallback。开发阶段 Vite 会帮你兜底，生产环境部署时要单独确认。
+
+5. **`createBrowserRouter` 不等于只能做静态页面切换**  
+   它还能管理路由级数据加载、提交、错误边界、重验证，这也是 React Router 现代数据路由设计的核心价值。
+
+6. **如果只是想理解最小运行机制，可以先抓住一条主线**  
+   `URL 变化` → `router 感知变化` → `重新匹配路由树` → `RouterProvider 收到新状态` → `React 重渲染` → `Outlet 显示新的子路由内容`
 
 ---
 

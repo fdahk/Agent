@@ -1,4 +1,5 @@
 import axios, { type AxiosInstance, type AxiosRequestConfig } from 'axios';
+import { getStoredToken } from '@/pages/auth/auth-context';
 
 /** 这个网络请求器还可以有深入研究的地方 ：
  * 手写中间件
@@ -67,6 +68,11 @@ export function createClient(defaultBaseURL: string): NetworkClient {
     (config) => {
       // 添加请求头
       config.headers['Content-Type'] = 'application/json';
+      // 注入 JWT Token（如果已登录）
+      const token = getStoredToken();
+      if (token) {
+        config.headers['Authorization'] = `Bearer ${token}`;
+      }
       // 添加请求参数
       config.params = config.params || {};
       config.params.timestamp = Date.now();
@@ -97,10 +103,12 @@ export function createClient(defaultBaseURL: string): NetworkClient {
 
     fetchStream: (url: string, options?: RequestInit) => {
       const fullUrl = url.startsWith('http') ? url : `${defaultBaseURL}${url}`;
+      const token = getStoredToken();
       return fetch(fullUrl, {
         ...options,
         headers: {
           'Content-Type': 'application/json',
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
           ...options?.headers,
         },
       });

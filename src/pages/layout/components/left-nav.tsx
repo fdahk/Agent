@@ -1,12 +1,19 @@
 import leftNavStyles from './left-nav.module.scss';
 import { useNavigate } from 'react-router-dom';
 import { useChatContext } from '../../chat-bot/chat-context';
+import { useAuth } from '../../auth/auth-context';
 import { useState, useEffect } from 'react';
 import type { SavedChat } from '../../chat-bot/chat-context';
 
 function LeftNav() {
     const navigate = useNavigate();
     const { clearChat, messages, saveCurrentChat, getSavedChats, loadChat, isHistoryChat } = useChatContext();
+    const { user, logout } = useAuth();
+
+    const handleLogout = () => {
+        logout();
+        navigate('/login', { replace: true });
+    };
     const handleClickNewChat = () => {
         //保存当前对话
         if (messages.length > 0 && !isHistoryChat) {
@@ -95,6 +102,20 @@ function LeftNav() {
                     <p>workspace</p>
                 </div>
             </div>
+            {user && (
+                <div className={leftNavStyles.userSection}>
+                    <div className={leftNavStyles.avatar}>
+                        {user.displayName.charAt(0).toUpperCase()}
+                    </div>
+                    <div className={leftNavStyles.userInfo}>
+                        <div className={leftNavStyles.displayName}>{user.displayName}</div>
+                        <div className={leftNavStyles.roleBadge}>{user.roleCode}</div>
+                    </div>
+                    <button className={leftNavStyles.logoutBtn} onClick={handleLogout}>
+                        退出
+                    </button>
+                </div>
+            )}
         </div>
     )
 }

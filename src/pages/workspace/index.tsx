@@ -10,6 +10,7 @@ function WorkspacePage() {
       <section className={workspaceStyles.sectionCard}>
         <div className={workspaceStyles.agentList}>
           {agents.map((agent) => (
+            // article 标签用于表示一个独立的内容块，通常用于博客文章、新闻报道、评论等场景
             <article key={agent.id} className={workspaceStyles.agentCard}>
               <div className={workspaceStyles.agentHeader}>
                 <div>

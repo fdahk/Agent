@@ -45,7 +45,7 @@ class AgentService {
       onError?: () => void;
     },
   ): EventSource {
-    // 创建 EventSource 对象，打开 SSE 连接
+    // 创建 EventSource 对象，打开 SSE 连接，EventSource 是浏览器内置对象，用于和服务器建立长连接，
     const eventSource = new EventSource(`${AGENT_SERVER_BASE}/agent/runs/${runId}/stream`);
 
     for (const eventType of streamEventTypes) {

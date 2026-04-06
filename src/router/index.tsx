@@ -6,10 +6,21 @@ import WorkspacePage from '@/pages/workspace';
 import ResourceOrganizerPage from '@/pages/workspace/resource-organizer-agent';
 import AgentStudyPage from '@/pages/workspace/agent-study';
 import { CozeAgent } from '@/pages/coze-agent';
+import LoginPage from '@/pages/auth/login';
+import { AuthGuard } from '@/pages/auth/auth-guard';
+
 export const router = createBrowserRouter([
   {
+    path: '/login',
+    element: <LoginPage />,
+  },
+  {
     path: '/',
-    element: <Layout />,
+    element: (
+      <AuthGuard>
+        <Layout />
+      </AuthGuard>
+    ),
     children: [
       {
         path: '/',
